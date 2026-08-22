@@ -1,8 +1,8 @@
 {
     "name": "JIOT Core",
     "version": "1.0.0",
-    "description": "Core IOT library for ESP8266 - boot, wifi, mqtt",
-    "keywords": "esp8266",
+    "description": "Core IOT library for ESP8266 and ESP32 - boot, wifi, mqtt",
+    "keywords": "esp8266, esp32",
     "repository":
     {
       "type": "git",

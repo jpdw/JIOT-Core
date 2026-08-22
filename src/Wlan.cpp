@@ -13,7 +13,7 @@ boolean settingMode;
 WiFiClient wifiClient;
 String ssidList;
 DNSServer dnsServer;
-ESP8266WebServer webServer(80);
+WebServerClass webServer(80);
 
 // Constants
 #define DEFAULT_PROFILE_INDEX 1
@@ -30,7 +30,7 @@ Wlan::Wlan(void)
 {
     // Get Chip Id (from MAC)
     this->deviceId = new char[7];
-    this->iDeviceId = ESP.getChipId();
+    this->iDeviceId = platformGetChipId();
     sprintf(this->deviceId, "%06X", this->iDeviceId);
 }
 

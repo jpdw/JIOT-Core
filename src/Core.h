@@ -10,8 +10,8 @@
 #pragma once
 // Framework includes
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
 #include <EEPROM.h>
+#include "platform.h"
 
 // Library includes
 #include "Wlan.h"

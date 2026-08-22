@@ -1,6 +1,6 @@
 JIOT Core
 
-Core ESP8266 library to handle WiFi, WiFi setup, and MQTT
+Core ESP8266/ESP32 library to handle WiFi, WiFi setup, and MQTT
 
 
   Example file

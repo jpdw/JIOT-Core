@@ -5,7 +5,7 @@ mqtt class header file
 
 #pragma once
 #include "PubSubClient.h"
-#include <ESP8266WiFi.h>
+#include "platform.h"
 
 
 class Mqtt {
