@@ -27,6 +27,18 @@ void setup()
     core = new Core();
     core->start();
 
+    // Exercise Core's new Gpio helper - register D5/D6/D7 as named outputs
+    // so loop() can toggle them as a simple hardware sanity check.
+    // Guarded on the real board macro, not on D5/D6/D7 themselves: on this
+    // core version they're typed constants, not #define macros, so
+    // `#if defined(D5)` silently evaluates false everywhere (verified via
+    // -v build output) rather than actually detecting the board.
+#ifdef ARDUINO_ESP8266_WEMOS_D1MINI
+    core->gpio.configureOutput("D5", D5);
+    core->gpio.configureOutput("D6", D6);
+    core->gpio.configureOutput("D7", D7);
+#endif
+
     // initialise serial data receiption/processing
 
     // register callback for simulated receipt of serial data
@@ -69,6 +81,16 @@ void loop()
 
         SER.print(">>> Freeheap = ");
         SER.println(ESP.getFreeHeap());
+
+#ifdef ARDUINO_ESP8266_WEMOS_D1MINI
+        static boolean gpioTestState = false;
+        gpioTestState = !gpioTestState;
+        core->gpio.setOutput("D5", gpioTestState);
+        core->gpio.setOutput("D6", gpioTestState);
+        core->gpio.setOutput("D7", gpioTestState);
+        SER.print(">>> GPIO test toggle (D5/D6/D7) = ");
+        SER.println(gpioTestState ? "ON" : "OFF");
+#endif
 
         if (!has_run)
         {

@@ -16,6 +16,7 @@
 // Library includes
 #include "Wlan.h"
 #include "Mqtt.h"
+#include "Gpio.h"
 
 // Other config & info
 #include "buildConfig.h"  
@@ -34,6 +35,7 @@ public:
     void start();           // Start core features
     void handle();          // Loop
     Mqtt mqtt;              // Mqtt object
+    Gpio gpio;               // Named digital output/input helper
 private:
     Wlan wlan;              // Wlan object
     
