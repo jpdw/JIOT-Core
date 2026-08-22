@@ -23,7 +23,7 @@
 //#endif
 
 #ifdef INCLUDE_DEBUG
-  RemoteDebug Debug;
+  ESPTelnet Telnet;
 #endif
 
 //#include "globals.h"
@@ -52,16 +52,11 @@ void Mlog::begin(char * deviceIdPtr){
 }
 
 void Mlog::startRemoteDebug(){
-    // Initialize RemoteDebug
+    // Initialize telnet-based remote debug output
 #ifdef INCLUDE_DEBUG
-	Debug.begin("RemoteDebug"); // Initialize the WiFi server
+	Telnet.begin(); // Start telnet server on the default port (23)
 
-    Debug.setResetCmdEnabled(true); // Enable the reset command
-
-	Debug.showProfiler(true); // Profiler (Good to measure times, to optimize codes)
-	Debug.showColors(true); // Colors
-
-    this->log("RemoteDebug started");
+    this->log("Telnet debug server started");
 #endif
     // End off setup
 }
@@ -104,7 +99,7 @@ void Mlog::log(const char *msg)
         SER.print("[NO RMDBG] ");
         SER.println(msgBuffer);
 
-        debugV("%s", msgBuffer);
+        Telnet.println(msgBuffer);
     #endif
     if (msgBuffer)
     {
@@ -178,6 +173,6 @@ void Mlog::log(char *str, ...)
 
 void Mlog::handle(){
 #ifdef INCLUDE_DEBUG
-    Debug.handle();
+    Telnet.loop();
 #endif
 }

@@ -5,8 +5,10 @@
 #include "Mqtt.h"
 
 #ifdef INCLUDE_DEBUG
-    #include <RemoteDebug.h>
-    extern RemoteDebug Debug;
+    // RemoteDebug (JoaoLopesF/RemoteDebug) is unmaintained (last commit 2019) -
+    // swapped for the actively-maintained lennarthennigs/ESPTelnet
+    #include <ESPTelnet.h>
+    extern ESPTelnet Telnet;
 #endif
 
 class Mlog{

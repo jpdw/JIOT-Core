@@ -4,7 +4,7 @@
 #include "coreDebug.h"
 #include "Core.h"
 #ifdef INCLUDE_DEBUG
-  #include <RemoteDebug.h>
+  #include <ESPTelnet.h>
 #endif
 
 

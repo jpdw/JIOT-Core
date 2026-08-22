@@ -1,0 +1,27 @@
+{
+    "name": "JIOT Core",
+    "version": "1.0.0",
+    "description": "Core IOT library for ESP8266 - boot, wifi, mqtt",
+    "keywords": "esp8266",
+    "repository":
+    {
+      "type": "git",
+      "url": "https://github.com/jpdw/JIOT-Core.git"
+    },
+    "authors":
+    [
+      {
+        "name": "Jon Wilkins",
+        "email": "jon.wilkins@blueellipse.net",
+        "url": "https://www.jpdw.org/contact",
+        "maintainer": true
+      }
+    ],
+    "frameworks": "*",
+    "platforms": "*",
+    "dependencies":
+    {
+      "knolleary/PubSubClient": "^2.8",
+      "lennarthennigs/ESP Telnet": "^2.3.0"
+    }
+  }
