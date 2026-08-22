@@ -26,6 +26,17 @@
 
 Mlog mlog;
 
+const char* wlanStateName(WlanState state){
+    switch((int)state){
+        case WLAN_OFF: return "WLAN_OFF";
+        case WLAN_STARTUP: return "WLAN_STARTUP";
+        case WLAN_AP_MODE: return "WLAN_AP_MODE";
+        case WLAN_STA_CONNECTING: return "WLAN_STA_CONNECTING";
+        case WLAN_STA_CONNECTED: return "WLAN_STA_CONNECTED";
+        default: return "UNKNOWN";
+    }
+}
+
 void Core::start(){
 
     // Set-up serial so we get debug early
@@ -124,7 +135,19 @@ void Core::handle(){
     mlog.handle();
 #endif
 
-}; 
+    // Periodic status report - useful while no application layer is
+    // exercising Core (e.g. examples/minimal.cpp)
+    static unsigned long nextStatusReport = 0;
+    if (millis() > nextStatusReport){
+        nextStatusReport = millis() + 15000;
+        SER.print(">>> Core status: WLAN=");
+        SER.print(wlanStateName(wlan.state));
+        SER.print(" MQTT initialized=");
+        SER.print(mqtt.isInitialized() ? "yes" : "no");
+        SER.print(" connected=");
+        SER.println(mqtt.connected ? "yes" : "no");
+    }
+};
 
 #ifdef INCLUDE_OTA_PUSH
 void start_ota(){

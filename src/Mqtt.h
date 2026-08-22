@@ -20,6 +20,7 @@ class Mqtt {
 
     public:
         boolean connected=false; // True is connected, false if not
+        boolean isInitialized(){ return _initialized; } // true once begin() has run (heartbeat is active)
         Mqtt(void);
         void begin(char *, char *); // Node name & device id
         boolean connect();       // Attempt to conneect to mqtt broker
