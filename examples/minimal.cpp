@@ -34,9 +34,11 @@ void setup()
     // `#if defined(D5)` silently evaluates false everywhere (verified via
     // -v build output) rather than actually detecting the board.
 #ifdef ARDUINO_ESP8266_WEMOS_D1MINI
-    core->gpio.configureOutput("D5", D5);
-    core->gpio.configureOutput("D6", D6);
-    core->gpio.configureOutput("D7", D7);
+    // Confirmed via live MQTT testing on a CB006 board: these lines are
+    // active-low (all three HIGH = LED off), so mark them inverted.
+    core->gpio.configureOutput("D5", D5, true);
+    core->gpio.configureOutput("D6", D6, true);
+    core->gpio.configureOutput("D7", D7, true);
 #endif
 
     // initialise serial data receiption/processing

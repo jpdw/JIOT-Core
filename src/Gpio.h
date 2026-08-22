@@ -14,20 +14,27 @@
 
 class Gpio {
     public:
-        boolean configureOutput(const char* name, uint8_t pin); // register + pinMode(OUTPUT)
-        boolean configureInput(const char* name, uint8_t pin);  // register + pinMode(INPUT)
-        boolean setOutput(const char* name, boolean state);     // true = HIGH, false = LOW
-        int readInput(const char* name);                        // returns HIGH/LOW, or -1 if unknown/not an input
+        // inverted: if true, the physical signal is the opposite of what
+        // the caller asks for (e.g. an active-low LED driver, so
+        // setOutput(name, true) actually drives the pin LOW). Defaults to
+        // false - the calling application opts in per pin, matching its
+        // own board wiring, matching the same pattern already used by
+        // EFXC's HwPort (see lib/Hal).
+        boolean configureOutput(const char* name, uint8_t pin, boolean inverted = false); // register + pinMode(OUTPUT)
+        boolean configureInput(const char* name, uint8_t pin, boolean inverted = false);  // register + pinMode(INPUT)
+        boolean setOutput(const char* name, boolean state);     // true = "on" (HIGH unless inverted)
+        int readInput(const char* name);                        // returns HIGH/LOW (post-inversion), or -1 if unknown/not an input
 
     private:
         struct GpioEntry {
             const char* name = nullptr;
             uint8_t pin = 0;
             boolean isOutput = false;
+            boolean inverted = false;
             boolean inUse = false;
         };
         GpioEntry _entries[GPIO_MAX_PINS];
 
         int findByName(const char* name);
-        int addEntry(const char* name, uint8_t pin, boolean isOutput);
+        int addEntry(const char* name, uint8_t pin, boolean isOutput, boolean inverted);
 };

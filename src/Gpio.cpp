@@ -10,7 +10,7 @@ int Gpio::findByName(const char* name){
     return -1;
 }
 
-int Gpio::addEntry(const char* name, uint8_t pin, boolean isOutput){
+int Gpio::addEntry(const char* name, uint8_t pin, boolean isOutput, boolean inverted){
     // Already registered under this name? Reconfigure that slot rather than
     // consuming another one.
     int idx = findByName(name);
@@ -28,20 +28,21 @@ int Gpio::addEntry(const char* name, uint8_t pin, boolean isOutput){
     _entries[idx].name = name;
     _entries[idx].pin = pin;
     _entries[idx].isOutput = isOutput;
+    _entries[idx].inverted = inverted;
     _entries[idx].inUse = true;
     return idx;
 }
 
-boolean Gpio::configureOutput(const char* name, uint8_t pin){
-    if(addEntry(name, pin, true) == -1){
+boolean Gpio::configureOutput(const char* name, uint8_t pin, boolean inverted){
+    if(addEntry(name, pin, true, inverted) == -1){
         return false;
     }
     pinMode(pin, OUTPUT);
     return true;
 }
 
-boolean Gpio::configureInput(const char* name, uint8_t pin){
-    if(addEntry(name, pin, false) == -1){
+boolean Gpio::configureInput(const char* name, uint8_t pin, boolean inverted){
+    if(addEntry(name, pin, false, inverted) == -1){
         return false;
     }
     pinMode(pin, INPUT);
@@ -53,7 +54,8 @@ boolean Gpio::setOutput(const char* name, boolean state){
     if(idx == -1 || !_entries[idx].isOutput){
         return false;
     }
-    digitalWrite(_entries[idx].pin, state ? HIGH : LOW);
+    boolean physicalHigh = _entries[idx].inverted ? !state : state;
+    digitalWrite(_entries[idx].pin, physicalHigh ? HIGH : LOW);
     return true;
 }
 
@@ -62,5 +64,9 @@ int Gpio::readInput(const char* name){
     if(idx == -1 || _entries[idx].isOutput){
         return -1;
     }
-    return digitalRead(_entries[idx].pin);
+    int raw = digitalRead(_entries[idx].pin);
+    if(_entries[idx].inverted){
+        return (raw == HIGH) ? LOW : HIGH;
+    }
+    return raw;
 }
