@@ -1,7 +1,7 @@
 JIOT Core
 
-Core ESP8266/ESP32 library to handle WiFi, WiFi setup, and MQTT
-
+An ESP8266/ESP32 library to provide common 'core' functionality in a single object, across the two architectures.
+Handles WiFi, WiFi setup, OTA updating, MQTT and a simple scheduler.
 
   Example file
 
@@ -9,3 +9,4 @@ Core ESP8266/ESP32 library to handle WiFi, WiFi setup, and MQTT
 
   To build: 
     pio ci examples/minimal.cpp --lib=./src
+    
