@@ -46,6 +46,11 @@ void Core::start(){
     // Get Device ID (string) early -- as this is fundamental
     this->deviceId = this->wlan.getDeviceIdSz();
 
+    // Let MQTT-received "gpio <name> on/off" commands reach our own gpio
+    // member - safe to wire up now regardless of WLAN/MQTT state, since
+    // handleCallback() only ever fires once MQTT actually connects.
+    mqtt.setGpio(&this->gpio);
+
     // Output minimal startup & build info
     SER.println();
     SER.print("Device ");

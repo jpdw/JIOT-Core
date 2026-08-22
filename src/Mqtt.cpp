@@ -13,6 +13,9 @@
 #include "coreDebug.h"
 
 #include "Mlog.h"
+#include "Gpio.h"
+#include <string.h>
+#include <stdio.h>
 
 extern Mlog mlog;
 
@@ -40,17 +43,6 @@ const unsigned int mqtt_server_port = 1883;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-
-/*
-client.setCallback(mqtt_callback);
-where std::function<void(char*, uint8_t*, unsigned int)> callback
-ie 
-client.setCallback(std::function<void(char*, uint8_t*, unsigned int)> callback);
-void mqtt_callback(char* topic, byte* payload, unsigned int length)
-*/
-void mqtt_callback(char* topic, byte* payload, unsigned int length){
-    mlog.log("mqtt_callback -- not implemented");
-}
 
 Mqtt::Mqtt(void){
     this->intervlHb = HB_INTERVAL_S * 1000;
@@ -123,9 +115,14 @@ boolean Mqtt::connect(){
 }
 
 void Mqtt::subscribe(){
-    this->client.subscribe("home/cc/raw");
-    this->client.subscribe("device/4EE184/log");
-    mlog.log("Subscribed to topics");
+    // Matches the topic scheme already documented at the top of
+    // buildConfig.h: device/<deviceid>/cmnd (this device only) and
+    // device/all/cmnd (every device).
+    char topic[32];
+    snprintf(topic, sizeof(topic), "device/%s/cmnd", this->deviceId);
+    this->client.subscribe(topic);
+    this->client.subscribe("device/all/cmnd");
+    mlog.log("Subscribed to command topics");
 }
 
 
@@ -171,59 +168,51 @@ void Mqtt::publishHello(){
 }
 
 
-extern char rawMqtt[170];
-
 /*
  *  Mqtt::handleCallback
  *
  *  Callback function that will be called by the mqtt object on receipt
- *  of a message for a subscribed topic.  Function will either process
- *  the message or make onward calls, depending on the specific topic
+ *  of a message for a subscribed topic (device/<deviceid>/cmnd or
+ *  device/all/cmnd - see Mqtt::subscribe()).
  *
+ *  Currently understands one command format: "gpio <name> on|off",
+ *  routed through whatever Gpio instance was registered via setGpio()
+ *  (Core wires this to its own gpio member).
  */
 void Mqtt::handleCallback(char *topic, byte *payload, unsigned int length){
-
-
-    //mlog.log("Callback for ");
-    //mlog.log(topic);  <--- this call appears to destroy the contents of the passed buffer..!
 
     SER.print("Callback for ");
     SER.println(topic);
 
-    // Parse topic and dispatch appropriately
+    // Copy the payload into a small, null-terminated buffer we can safely
+    // treat as a string - payload/length as delivered by PubSubClient are
+    // not null-terminated.
+    char msg[64];
+    unsigned int copyLen = (length < sizeof(msg) - 1) ? length : sizeof(msg) - 1;
+    memcpy(msg, payload, copyLen);
+    msg[copyLen] = '\0';
 
-    if (strcmp(topic, "home/cc/raw")==0){
-        // copy payload to shared buffer
-        strcpy(rawMqtt, (char*)payload);
-        return;
-    }
-
-    // Look for some simple topics
-    if (strncmp(topic, "device/global/clock", 19) == 0)
-    {
-        // --->> mqtt_parse_message_clock(payload);
-        return;
-    }
-
-    // Topic starts with "device/"?
-    if (strncmp(topic, "device/", 7) == 0)
-    {
-        //Serial.print("match so far");
-        char *lch = strchr(topic, '/');
-        char *pch = strrchr(topic, '/');
-
-        //bool global = false;
-        if (strncmp(lch, "/global", pch - lch) == 0)
-        {
-            // global addressee
-            //global = true;
+    if (this->_gpio != nullptr){
+        char cmd[8];
+        char pinName[8];
+        char state[8];
+        if (sscanf(msg, "%7s %7s %7s", cmd, pinName, state) == 3 && strcmp(cmd, "gpio") == 0){
+            boolean on = (strcmp(state, "on") == 0);
+            boolean off = (strcmp(state, "off") == 0);
+            if (on || off){
+                boolean ok = this->_gpio->setOutput(pinName, on);
+                SER.print("gpio command: ");
+                SER.print(pinName);
+                SER.print(" -> ");
+                SER.print(on ? "ON" : "OFF");
+                SER.println(ok ? " (applied)" : " (unknown pin)");
+                return;
+            }
         }
-
-        // dispatch to handle payload
-        // --->> command_received(payload, length, global);
     }
 
-
+    SER.print("Unrecognised command: ");
+    SER.println(msg);
 }
 
 /*
@@ -256,28 +245,6 @@ void Mqtt::handle(){
         nextHeartbeat = nextHeartbeat + this->intervlHb;
         this->publishHeartbeat();
     }
-}
-
-
-/* ==========================================================================
- * ==========================================================================
- *
- * MQTT RELATED FUNCTIONS
- *
- * ==========================================================================
- * ==========================================================================
- */
-
-/*
- * parse_mqtt_message_clock
- *
- * Parse the payload then try
- */
-
-bool mqtt_parse_message_clock(byte *payload)
-{
-
-    return true;
 }
 
 

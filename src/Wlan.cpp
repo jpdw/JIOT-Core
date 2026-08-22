@@ -16,7 +16,7 @@ DNSServer dnsServer;
 WebServerClass webServer(80);
 
 // Constants
-#define DEFAULT_PROFILE_INDEX 1
+#define DEFAULT_PROFILE_INDEX 0 // 0-based - indexes directly into wlanConfig[2]
 #define WLAN_ASSOCIATION_TIMEOUT 15 /* seconds */
 
 // Define helper functions that are at the end of this file
@@ -61,14 +61,10 @@ boolean Wlan::begin()
         }
         else
         {
-            // Select the "other" profile
-            if(index == 1){
-                index=2;
-            }else{
-                index=1;
-            }
+            // Select the "other" profile (0-based: 0<->1)
+            index = (index == 0) ? 1 : 0;
 
-            if (this->wlanAssociate(!index) == true)
+            if (this->wlanAssociate(index) == true)
             {
                 SER.println("connected second time");
             }
@@ -109,35 +105,34 @@ unsigned int Wlan::getDeviceIdInt()
 
 boolean Wlan::readWlanProfile(unsigned int index)
 {
-    unsigned int zbIndex = index-1;
-    unsigned int offset = 4 + (zbIndex * 96);
+    // index is 0-based, matching wlanConfig[2] and readConfig()'s loop
+    unsigned int offset = 4 + (index * 96);
 
     SER.print("Reading config profile #");
-    SER.println(index);
+    SER.println(index + 1); // printed 1-based for humans
 
-    this->wlanConfig[zbIndex].ssid = "";
-    this->wlanConfig[zbIndex].pass = "";
+    this->wlanConfig[index].ssid = "";
+    this->wlanConfig[index].pass = "";
 
     if (EEPROM.read(offset) != 0 && EEPROM.read(offset) != 255)
     {
         for (int i = 0; i < 32; ++i)
         {
-            wlanConfig[zbIndex].ssid += char(EEPROM.read(offset + i));
+            wlanConfig[index].ssid += char(EEPROM.read(offset + i));
         }
         SER.print("SSID: ");
-        SER.println(wlanConfig[zbIndex].ssid);
+        SER.println(wlanConfig[index].ssid);
         for (int i = 32; i < 96; ++i)
         {
-            wlanConfig[zbIndex].pass += char(EEPROM.read(offset + i));
+            wlanConfig[index].pass += char(EEPROM.read(offset + i));
         }
 
         unsigned int a[4];
         for (int i = 0; i < 4; ++i)
         {
-            wlanConfig[zbIndex].ipaddr[0] = (uint8_t) char(EEPROM.read(offset + 96 + i));
             a[i] = char(EEPROM.read(offset + 96 + i));
         }
-        wlanConfig[zbIndex].ipaddr = String(a[0]) + "." + String(a[1]) + "." + String(a[2]) + "." + String(a[3]);
+        wlanConfig[index].ipaddr = String(a[0]) + "." + String(a[1]) + "." + String(a[2]) + "." + String(a[3]);
 
         return true;
     }

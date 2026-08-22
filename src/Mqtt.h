@@ -7,18 +7,21 @@ mqtt class header file
 #include "PubSubClient.h"
 #include "platform.h"
 
+class Gpio; // forward declaration - see Gpio.h; only a pointer is needed here
 
 class Mqtt {
     private:
         PubSubClient client;
-        
+
         char* nodeName;          // Pointer to node name used for identifying self in MQTT connection
         char* deviceId;          // Pointer to device id (string)
-        unsigned long intervlHb; // Heartbeat interval -- 
+        unsigned long intervlHb; // Heartbeat interval --
         char* topicPrepend;      // Prepend to (almost all) topics
         boolean _initialized = false; // true once begin() has actually run
+        Gpio* _gpio = nullptr;   // set via setGpio() - lets "gpio <name> on/off" commands reach it
 
     public:
+        void setGpio(Gpio* gpio){ this->_gpio = gpio; }
         boolean connected=false; // True is connected, false if not
         boolean isInitialized(){ return _initialized; } // true once begin() has run (heartbeat is active)
         Mqtt(void);
