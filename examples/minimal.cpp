@@ -83,13 +83,22 @@ void loop()
         SER.println(ESP.getFreeHeap());
 
 #ifdef ARDUINO_ESP8266_WEMOS_D1MINI
-        static boolean gpioTestState = false;
-        gpioTestState = !gpioTestState;
-        core->gpio.setOutput("D5", gpioTestState);
-        core->gpio.setOutput("D6", gpioTestState);
-        core->gpio.setOutput("D7", gpioTestState);
-        SER.print(">>> GPIO test toggle (D5/D6/D7) = ");
-        SER.println(gpioTestState ? "ON" : "OFF");
+        // Rotate one pin on at a time - OFF, D5, OFF, D6, OFF, D7, OFF, D5...
+        // (10s/step) rather than driving all three simultaneously, to keep
+        // power/heat down.
+        static uint8_t gpioTestStep = 0;
+        boolean d5on = (gpioTestStep == 1);
+        boolean d6on = (gpioTestStep == 3);
+        boolean d7on = (gpioTestStep == 5);
+        core->gpio.setOutput("D5", d5on);
+        core->gpio.setOutput("D6", d6on);
+        core->gpio.setOutput("D7", d7on);
+        SER.print(">>> GPIO test step = ");
+        if(d5on) SER.println("D5");
+        else if(d6on) SER.println("D6");
+        else if(d7on) SER.println("D7");
+        else SER.println("OFF");
+        gpioTestStep = (gpioTestStep + 1) % 6;
 #endif
 
         if (!has_run)
