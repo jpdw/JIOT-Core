@@ -73,6 +73,10 @@ void Mqtt::begin(char * nodeName, char * deviceId){
     this->topicPrepend = new char[strlen(TOPIC_CONTEXT) + strlen(this->deviceId) +3];
     sprintf(this->topicPrepend, "%s/%s/",TOPIC_CONTEXT, this->deviceId);
 
+    // topicPrepend (and nodeName/deviceId above) are now safe to use -
+    // nothing in handle()/publish() should touch them before this point
+    this->_initialized = true;
+
     if(this->connect()){
         this->subscribe();
         // Publish hello to alert the network that this client has connected
@@ -90,7 +94,7 @@ void Mqtt::begin(char * nodeName, char * deviceId){
  */
 boolean Mqtt::connect(){
     char client_id[50];
-    sprintf(client_id, "ESP8266 Client %s", nodeName);
+    snprintf(client_id, sizeof(client_id), "ESP8266 Client %s", nodeName);
 
     // Loop until we're reconnected
     while (!client.connected())
@@ -131,8 +135,8 @@ void Mqtt::subscribe(){
  *   prepend topic with '<context>/<device>/'
  */
 void Mqtt::publish(const char * topic, const char * payload){
-    char pubTopic[strlen(topic) + strlen(this->topicPrepend)];
-    sprintf(pubTopic,"%s%s", this->topicPrepend, topic);
+    char pubTopic[strlen(topic) + strlen(this->topicPrepend) + 1];
+    snprintf(pubTopic, sizeof(pubTopic), "%s%s", this->topicPrepend, topic);
 FREEHEAP_BASELINE   
     this->client.publish(pubTopic, payload);
 FREEHEAP_REPORT 
@@ -233,12 +237,19 @@ void Mqtt::handleCallback(char *topic, byte *payload, unsigned int length){
  */
 
 void Mqtt::handle(){
+    // begin() hasn't run yet (e.g. WLAN is still in AP/setup mode) - nothing
+    // below is safe to touch until it has (topicPrepend/nodeName/deviceId
+    // aren't set), so bail out entirely rather than crashing on first use.
+    if (!this->_initialized){
+        return;
+    }
+
     static unsigned long nextHeartbeat = millis() + this->intervlHb;
     if (this->connected){
         this->client.loop();
     }
 
-    
+
     // Send hearthbeat periodically
     if (millis() > nextHeartbeat){
         //Serial.println(".");

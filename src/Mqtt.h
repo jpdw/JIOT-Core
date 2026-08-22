@@ -16,6 +16,7 @@ class Mqtt {
         char* deviceId;          // Pointer to device id (string)
         unsigned long intervlHb; // Heartbeat interval -- 
         char* topicPrepend;      // Prepend to (almost all) topics
+        boolean _initialized = false; // true once begin() has actually run
 
     public:
         boolean connected=false; // True is connected, false if not

@@ -6,7 +6,7 @@
 // Whether to include DEBUG features in the code
 //#define INCLUDE_DEBUG
 // Which serial port to use for debug ouput (usually Serial1)
-#define SER Serial1
+#define SER Serial
 
 #define SERIAL_BAUD 115200  /* default serial debug baud rate */
 #define APP_STRING "uNode2" /* prepend hostname with this */
