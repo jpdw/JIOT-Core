@@ -44,9 +44,10 @@ class Wlan{
     public:
         char * getDeviceIdSz();                         /* Return the device id as a string pointer */
         unsigned int getDeviceIdInt();                  /* Return the device id as a unint32 */
+        String getMqttIp();                             /* MQTT IP saved with the connected profile, or "" if none */
         boolean associated;                             /* Is associated with a WLAN? */
         WlanState state = WLAN_STARTUP;                 /* Is current WLAN state */
-        unsigned int profileIndex;                      /* Index of the connected profile (or 0) */
+        unsigned int profileIndex = 0;                  /* Index of the connected profile (or 0) */
 
         // Methods
         Wlan();                                         /* Constructor */

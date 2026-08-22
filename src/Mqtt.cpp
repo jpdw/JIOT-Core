@@ -21,7 +21,7 @@ extern Mlog mlog;
 
 #define HB_INTERVAL_S 60        // HB interval in seconds
 
-const char *mqtt_server_ip = "10.1.1.33";
+const char *mqtt_server_ip = "10.1.1.13"; // fallback if no server IP was saved via WiFi setup
 const unsigned int mqtt_server_port = 1883;
 
 #define FREEHEAP_REPORT SER.print("Freeheap reduction = "); SER.println(before-ESP.getFreeHeap());
@@ -49,12 +49,22 @@ Mqtt::Mqtt(void){
     this->client=mqttClient;
 }
 
-void Mqtt::begin(char * nodeName, char * deviceId){
-    
+void Mqtt::begin(char * nodeName, char * deviceId, const char * serverIp){
+
     this->nodeName = nodeName;
     this->deviceId = deviceId;
-    this->client.setServer(mqtt_server_ip, mqtt_server_port);
-    
+
+    const char* useServer = mqtt_server_ip; // hardcoded fallback
+    if(serverIp != nullptr && strlen(serverIp) > 0){
+        // Take our own copy - PubSubClient::setServer only stores the
+        // pointer it's given, so it must stay valid for the connection's
+        // whole lifetime, not just this call.
+        this->_serverIp = new char[strlen(serverIp) + 1];
+        strcpy(this->_serverIp, serverIp);
+        useServer = this->_serverIp;
+    }
+    this->client.setServer(useServer, mqtt_server_port);
+
     using std::placeholders::_1;
     using std::placeholders::_2;
     using std::placeholders::_3;

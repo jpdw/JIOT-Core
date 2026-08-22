@@ -103,6 +103,18 @@ unsigned int Wlan::getDeviceIdInt()
     return iDeviceId;
 }
 
+String Wlan::getMqttIp()
+{
+    // Only meaningful once state == WLAN_STA_CONNECTED (profileIndex is set
+    // at that point in begin()); guard the bound regardless since this may
+    // be called before/without that ever happening.
+    if (this->profileIndex < 2)
+    {
+        return this->wlanConfig[this->profileIndex].ipaddr;
+    }
+    return "";
+}
+
 boolean Wlan::readWlanProfile(unsigned int index)
 {
     // index is 0-based, matching wlanConfig[2] and readConfig()'s loop

@@ -122,7 +122,8 @@ void Core::start(){
         }
 #endif
         delay(1000);
-        mqtt.begin((char*)"new node", this->deviceId);
+        String savedMqttIp = wlan.getMqttIp();
+        mqtt.begin((char*)"new node", this->deviceId, savedMqttIp.c_str());
     }
     mlog.log("Setup complete");
 }
