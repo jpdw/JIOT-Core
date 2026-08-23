@@ -20,6 +20,7 @@
 extern Mlog mlog;
 
 #define HB_INTERVAL_S 60        // HB interval in seconds
+#define MQTT_RECONNECT_DELAY_MS 5000 // delay between (non-blocking) connect retries
 
 const char *mqtt_server_ip = "10.1.1.13"; // fallback if no server IP was saved via WiFi setup
 const unsigned int mqtt_server_port = 1883;
@@ -79,49 +80,44 @@ void Mqtt::begin(char * nodeName, char * deviceId, const char * serverIp){
     // nothing in handle()/publish() should touch them before this point
     this->_initialized = true;
 
-    if(this->connect()){
-        this->subscribe();
-        // Publish hello to alert the network that this client has connected
-        // (Note - should this differentiate between first-connection & reconnect?)
-        this->publishHello();
-    }
+    // One non-blocking attempt now; if it fails (broker unreachable at
+    // boot), Mqtt::handle() retries on a timer rather than blocking here.
+    this->connect();
 }
 
 /*
  *  Mqtt::connect()
  *
- *  MQTT client has become disconnected for some reason -- attempt to
- *   reconnect with the MQTT broker.
+ *  Make a single, non-blocking attempt to connect to the MQTT broker -
+ *  does not loop or delay() itself. Mqtt::handle() is responsible for
+ *  calling this again on a retry schedule if it fails, so nothing in
+ *  this library ever blocks waiting on the network.
  *
+ *  On success, also subscribes and publishes the "hello" announcement -
+ *  done here (not just in begin()) so a later successful retry behaves
+ *  the same as the initial connection.
  */
 boolean Mqtt::connect(){
     char client_id[50];
     snprintf(client_id, sizeof(client_id), "ESP8266 Client %s", nodeName);
 
-    // Loop until we're reconnected
-    while (!client.connected())
+    mlog.log("Attempting MQTT connection...");
+    if (client.connect(client_id))
     {
-        mlog.log("Attempting MQTT connection...");
-        // Attempt to connect
-        if (client.connect(client_id))
-        {
-            SER.print("connected as ");
-            SER.println(client_id);
-            // ... and subscribe to topics:
-
-            this->connected = true;
-            return true;
-        }
-        else
-        {
-            SER.print("failed, rc=");
-            SER.print(client.state());
-            SER.println(" try again in 5 seconds");
-            // Wait 5 seconds before retrying
-            delay(1000);
-        }
+        SER.print("connected as ");
+        SER.println(client_id);
+        this->connected = true;
+        this->subscribe();
+        this->publishHello();
+        return true;
     }
-    return false;
+    else
+    {
+        SER.print("failed, rc=");
+        SER.println(client.state());
+        this->connected = false;
+        return false;
+    }
 }
 
 void Mqtt::subscribe(){
@@ -243,15 +239,30 @@ void Mqtt::handle(){
         return;
     }
 
-    static unsigned long nextHeartbeat = millis() + this->intervlHb;
-    if (this->connected){
-        this->client.loop();
+    // The underlying connection can drop at any time (network blip, broker
+    // restart, etc.) without us calling anything - keep our own flag in
+    // sync so the retry logic below actually kicks back in.
+    if (this->connected && !this->client.connected()){
+        this->connected = false;
+        mlog.log("MQTT connection lost");
     }
 
+    if (!this->connected){
+        // Non-blocking retry: try again at most once per
+        // MQTT_RECONNECT_DELAY_MS, never loop/delay() here.
+        static unsigned long nextConnectAttempt = 0;
+        if (millis() > nextConnectAttempt){
+            nextConnectAttempt = millis() + MQTT_RECONNECT_DELAY_MS;
+            this->connect();
+        }
+        return; // nothing else to do until we're actually connected
+    }
 
-    // Send hearthbeat periodically
+    this->client.loop();
+
+    // Send heartbeat periodically
+    static unsigned long nextHeartbeat = millis() + this->intervlHb;
     if (millis() > nextHeartbeat){
-        //Serial.println(".");
         nextHeartbeat = nextHeartbeat + this->intervlHb;
         this->publishHeartbeat();
     }
