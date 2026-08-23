@@ -150,17 +150,19 @@ FREEHEAP_REPORT
 }
 
 void Mqtt::publishHeartbeat(){
-    // count/duration match effects_controller's old heartbeat shape - duration
-    // here is the actual measured gap since the last heartbeat (via millis()),
-    // not just an echo of the configured interval, so a late/drifting loop
-    // shows up in the payload itself rather than being masked by it.
+    // "interval" is the constant, planned gap between heartbeats (the
+    // configured value, same every time). "actual" is the genuinely
+    // measured gap since the last heartbeat via millis() - lets a late/
+    // drifting loop show up in the payload itself, rather than being
+    // masked by only ever reporting the planned value. No prior heartbeat
+    // to measure "actual" from on the very first one, so it's 0 there.
     static unsigned int hbCount = 0;
     static unsigned long lastHeartbeatMillis = 0;
     unsigned long now = millis();
-    unsigned long duration = (hbCount == 0) ? 0 : (now - lastHeartbeatMillis);
+    unsigned long actual = (hbCount == 0) ? 0 : (now - lastHeartbeatMillis);
 
-    char msg[80];
-    sprintf(msg,"{'count':%u,'duration':%lu,'freeheap':%zu}", hbCount, duration, ESP.getFreeHeap());
+    char msg[100];
+    sprintf(msg,"{'count':%u,'interval':%lu,'actual':%lu,'freeheap':%zu}", hbCount, this->intervlHb, actual, ESP.getFreeHeap());
     SER.print("heartbeat = ");
     mlog.log(msg);
 
