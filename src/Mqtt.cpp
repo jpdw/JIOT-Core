@@ -150,12 +150,24 @@ FREEHEAP_REPORT
 }
 
 void Mqtt::publishHeartbeat(){
-    char msg[50];
-    sprintf(msg,"{'freeheap':%zu}", ESP.getFreeHeap());
+    // count/duration match effects_controller's old heartbeat shape - duration
+    // here is the actual measured gap since the last heartbeat (via millis()),
+    // not just an echo of the configured interval, so a late/drifting loop
+    // shows up in the payload itself rather than being masked by it.
+    static unsigned int hbCount = 0;
+    static unsigned long lastHeartbeatMillis = 0;
+    unsigned long now = millis();
+    unsigned long duration = (hbCount == 0) ? 0 : (now - lastHeartbeatMillis);
+
+    char msg[80];
+    sprintf(msg,"{'count':%u,'duration':%lu,'freeheap':%zu}", hbCount, duration, ESP.getFreeHeap());
     SER.print("heartbeat = ");
     mlog.log(msg);
-  
+
     this->publish("heartbeat",msg);
+
+    hbCount++;
+    lastHeartbeatMillis = now;
 }
 
 void Mqtt::publishHello(){
