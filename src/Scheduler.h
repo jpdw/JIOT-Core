@@ -1,12 +1,18 @@
 /*
     Scheduler - minimal non-blocking, millis()-based cooperative scheduler
 
-    Lets an application register a periodic or one-shot callback under a
-    fixed set of slots, then relies on Core::handle() to poll them each
-    loop iteration. Deliberately simple (no dynamic allocation, no
-    dependencies beyond Arduino's millis()) so it fits Core's existing
-    "nothing in this library blocks" design - see Mqtt's non-blocking
-    connect/retry logic for the same pattern.
+    Lets an application register a periodic or one-shot callback, then
+    relies on Core::handle() to poll them each loop iteration. Fits Core's
+    existing "nothing in this library blocks" design - see Mqtt's
+    non-blocking connect/retry logic for the same pattern.
+
+    Entries are allocated on demand (one `new` per schedule() call, freed
+    on cancel() or when a one-shot fires) rather than drawn from a fixed
+    array, and each carries an owner tag: Core itself schedules its own
+    internal work as SCHEDULER_OWNER_CORE, while `core.scheduler` is also
+    exposed for consuming modules to use directly (default
+    SCHEDULER_OWNER_CLIENT) - a client-owned cancel() call cannot remove a
+    Core-owned entry. Both requirements per JIOT-Core issue #3.
 
     Superseded a previous, disabled scheduler.cpp.txt/h.txt that was tied
     to a different, older project (hardcoded external callbacks like
@@ -17,24 +23,41 @@
 
 #include <Arduino.h>
 
-#define SCHEDULER_MAX_SLOTS 8
+enum SchedulerOwner {
+    SCHEDULER_OWNER_CORE,
+    SCHEDULER_OWNER_CLIENT
+};
 
 class Scheduler {
     public:
+        ~Scheduler();
+
         // Registers callback to run every intervalMs (recurring=true), or
-        // once after intervalMs (recurring=false). Returns the slot id
-        // (>= 0) to later cancel(), or -1 if every slot is in use.
-        int schedule(unsigned long intervalMs, void (*callback)(), boolean recurring = true);
-        void cancel(int slot); // stop and free a slot; safe to call with -1 or an already-free slot
-        void handle();          // call once per Core::handle() loop
+        // once after intervalMs (recurring=false). owner defaults to
+        // SCHEDULER_OWNER_CLIENT; Core passes SCHEDULER_OWNER_CORE for its
+        // own internal scheduling so client code can't cancel it. Returns
+        // an id to later pass to cancel() - entries are allocated on
+        // demand, there is no fixed limit.
+        int schedule(unsigned long intervalMs, void (*callback)(), boolean recurring = true, SchedulerOwner owner = SCHEDULER_OWNER_CLIENT);
+
+        // Cancels and frees entry `id`. A SCHEDULER_OWNER_CLIENT caller
+        // (the default) cannot cancel a SCHEDULER_OWNER_CORE entry - only
+        // Core itself (passing SCHEDULER_OWNER_CORE) can. Safe to call
+        // with an unknown/already-cancelled id.
+        void cancel(int id, SchedulerOwner requester = SCHEDULER_OWNER_CLIENT);
+
+        void handle(); // call once per Core::handle() loop
 
     private:
-        struct Slot {
-            boolean active = false;
-            boolean recurring = true;
-            unsigned long interval = 0;
-            unsigned long nextEvent = 0;
-            void (*callback)() = nullptr;
+        struct Entry {
+            int id;
+            boolean recurring;
+            unsigned long interval;
+            unsigned long nextEvent;
+            void (*callback)();
+            SchedulerOwner owner;
+            Entry* next;
         };
-        Slot _slots[SCHEDULER_MAX_SLOTS];
+        Entry* _head = nullptr;
+        int _nextId = 0;
 };
