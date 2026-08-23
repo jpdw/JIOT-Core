@@ -16,8 +16,13 @@ DNSServer dnsServer;
 WebServerClass webServer(80);
 
 // Constants
-#define DEFAULT_PROFILE_INDEX 0 // 0-based - indexes directly into wlanConfig[2]
 #define WLAN_ASSOCIATION_TIMEOUT 15 /* seconds */
+// Bytes per stored profile: 32 SSID + 64 password + 4 MQTT IP = 100.
+// (Was previously packed at a 96-byte stride - too small for the 100 bytes
+// actually written, so profile N+1 silently overlapped/corrupted profile
+// N's saved MQTT IP. Never hit in practice because only slot 0 was ever
+// written before profiles became selectable.)
+#define WLAN_PROFILE_EEPROM_SIZE 100
 
 // Define helper functions that are at the end of this file
 void writeEeprom(unsigned int, String, String, const unsigned int*);
@@ -44,46 +49,41 @@ Wlan::Wlan(void)
  */
 boolean Wlan::begin()
 {
-    unsigned int index = DEFAULT_PROFILE_INDEX; // Default profile index to use
-
     // Ensure case softAP is disabled
     WiFi.softAPdisconnect(true);
 
     if (this->readConfig())
     {
         WiFi.mode(WIFI_STA);
-        //WiFi.hostname(string_buffer);
-        //WiFi.begin(essid, password);
 
-        if (this->wlanAssociate(index) == true)
+        // Try every remembered profile that actually has a saved SSID, in
+        // slot order, until one succeeds or we run out - lets a device
+        // move between several known networks (dev/test, home, off-grid,
+        // ...) without needing to guess which one it's on.
+        for (unsigned int i = 0; i < MAX_WLAN_PROFILES; ++i)
         {
-            SER.println("connected first time");
+            if (wlanConfig[i].ssid.length() == 0)
+            {
+                continue; // empty slot
+            }
+
+            if (this->wlanAssociate(i) == true)
+            {
+                SER.print("connected using profile #");
+                SER.println(i + 1); // printed 1-based for humans
+                this->profileIndex = i;
+                break;
+            }
         }
-        else
-        {
-            // Select the "other" profile (0-based: 0<->1)
-            index = (index == 0) ? 1 : 0;
 
-            if (this->wlanAssociate(index) == true)
-            {
-                SER.println("connected second time");
-            }
-            else
-            {
-                // failed twice
-                SER.println("failed twice");
-            }
+        if (this->state != WLAN_STA_CONNECTED)
+        {
+            SER.println("failed to connect using any saved profile");
         }
     }
 
-    // If connected...
-    if (this->state == WLAN_STA_CONNECTED){
-
-        // Store the connected profile
-        this->profileIndex=index;
-
-    }else{
-        // Start the set-up mode AP
+    // If not connected, start the set-up mode AP
+    if (this->state != WLAN_STA_CONNECTED){
         this->setupMode();
     }
 
@@ -108,7 +108,7 @@ String Wlan::getMqttIp()
     // Only meaningful once state == WLAN_STA_CONNECTED (profileIndex is set
     // at that point in begin()); guard the bound regardless since this may
     // be called before/without that ever happening.
-    if (this->profileIndex < 2)
+    if (this->profileIndex < MAX_WLAN_PROFILES)
     {
         return this->wlanConfig[this->profileIndex].ipaddr;
     }
@@ -117,8 +117,8 @@ String Wlan::getMqttIp()
 
 boolean Wlan::readWlanProfile(unsigned int index)
 {
-    // index is 0-based, matching wlanConfig[2] and readConfig()'s loop
-    unsigned int offset = 4 + (index * 96);
+    // index is 0-based, matching wlanConfig[] and readConfig()'s loop
+    unsigned int offset = 4 + (index * WLAN_PROFILE_EEPROM_SIZE);
 
     SER.print("Reading config profile #");
     SER.println(index + 1); // printed 1-based for humans
@@ -155,6 +155,32 @@ boolean Wlan::readWlanProfile(unsigned int index)
 }
 
 /*
+ *  findProfileSlot
+ *
+ *  Returns the index of the existing profile matching `ssid` (so setup
+ *  updates that slot in place - e.g. just changing the saved MQTT IP for
+ *  a network you've already configured - rather than creating a
+ *  duplicate), or the first empty slot for a new network, or -1 if every
+ *  slot already holds a different network.
+ */
+int Wlan::findProfileSlot(String ssid)
+{
+    int firstEmpty = -1;
+    for (unsigned int i = 0; i < MAX_WLAN_PROFILES; ++i)
+    {
+        if (wlanConfig[i].ssid == ssid)
+        {
+            return i;
+        }
+        if (firstEmpty == -1 && wlanConfig[i].ssid.length() == 0)
+        {
+            firstEmpty = i;
+        }
+    }
+    return firstEmpty;
+}
+
+/*
   readConfig
 
   Read network config from EEPROM and returns
@@ -182,7 +208,7 @@ boolean Wlan::readConfig()
     if (eepromMapVersion > 0)
     {
 
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < MAX_WLAN_PROFILES; ++i)
         {
             readWlanProfile(i);
         }
@@ -364,7 +390,20 @@ void Wlan::startWebServer()
             SER.println(ip[3]);
             SER.print("done");
 
-            writeEeprom(0, ssid, pass, ip);
+            // Update the existing slot for this SSID if it's already
+            // saved, otherwise the first free slot - not always slot 0,
+            // so multiple networks can be remembered at once.
+            int slot = this->findProfileSlot(ssid);
+            if (slot == -1)
+            {
+                String s = "<h1>Setup failed</h1><p>All ";
+                s += MAX_WLAN_PROFILES;
+                s += " saved network slots are already in use. Reset Wi-Fi settings first to free one up.</p>";
+                webServer.send(200, "text/html", makePage("Wi-Fi Settings", s));
+                return;
+            }
+
+            writeEeprom(slot, ssid, pass, ip);
 
             String s = "<h1>Setup complete.</h1><p>device will be connected to \"";
             s += ssid;
@@ -388,7 +427,11 @@ void Wlan::startWebServer()
             webServer.send(200, "text/html", makePage("STA mode", s));
         });
         webServer.on("/reset", [&]() {
-            for (int i = 0; i < 96; ++i)
+            // Wipe the signature bytes plus every profile slot - previously
+            // only wiped the first 96 bytes, which barely reached past
+            // slot 0 and never touched any other saved network.
+            unsigned int totalBytes = 4 + (MAX_WLAN_PROFILES * WLAN_PROFILE_EEPROM_SIZE);
+            for (unsigned int i = 0; i < totalBytes; ++i)
             {
                 EEPROM.write(i, 0);
             }
@@ -558,7 +601,7 @@ void showEeprom(int addr_from, int length)
 }
 void writeEeprom(unsigned int index, String ssid, String pass, const unsigned int mqttIp[4])
 {
-    unsigned int offset = 4 + (index * 96);
+    unsigned int offset = 4 + (index * WLAN_PROFILE_EEPROM_SIZE);
     unsigned int i;
 
     // Write signature
@@ -568,7 +611,7 @@ void writeEeprom(unsigned int index, String ssid, String pass, const unsigned in
     EEPROM.write(3, 0x01);
 
     // Clear EEPROM for this record/index
-    for (int i = 0; i < 100; ++i)
+    for (unsigned int i = 0; i < WLAN_PROFILE_EEPROM_SIZE; ++i)
     {
         EEPROM.write(offset + i, 0);
     }

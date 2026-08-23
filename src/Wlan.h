@@ -11,14 +11,19 @@
 #include <EEPROM.h>
 #include "platform.h"
 
-typedef enum WlanState 
+typedef enum WlanState
 {
-    WLAN_OFF = 0, 
+    WLAN_OFF = 0,
     WLAN_STARTUP = 1,
-    WLAN_AP_MODE = 2, 
-    WLAN_STA_CONNECTING = 3, 
+    WLAN_AP_MODE = 2,
+    WLAN_STA_CONNECTING = 3,
     WLAN_STA_CONNECTED = 4
 } WlanState_t;
+
+// Max number of remembered WLAN profiles (each with its own SSID/password
+// and MQTT broker IP) - lets a device move between several known networks
+// (e.g. dev/test, home, off-grid) without re-entering everything each time.
+#define MAX_WLAN_PROFILES 4
 
 class WlanScanNetworks{
     private:
@@ -56,8 +61,8 @@ class Wlan{
     private:
         char * deviceId;                                /* Pointer to device id string */
         unsigned int iDeviceId;                         /* uint32 representation of device id */
-        WlanConfig wlanConfig[2];
-        unsigned int wlanConfigCount = 0;        
+        WlanConfig wlanConfig[MAX_WLAN_PROFILES];
+        unsigned int wlanConfigCount = 0;
 
         boolean wlanAssociate(unsigned int);
         boolean wlanAssociationRequest(const char *,const char *);
@@ -65,6 +70,7 @@ class Wlan{
 
         boolean readConfig();
         boolean readWlanProfile(unsigned int);
+        int findProfileSlot(String ssid);               /* existing slot for ssid, first empty slot, or -1 if full */
 
         void setupMode();  
         String makePage(String, String);
