@@ -146,6 +146,7 @@ void Core::start(){
 void Core::handle(){
     wlan.handle();
     mqtt.handle();
+    scheduler.handle();
 #ifdef INCLUDE_OTA_PUSH
     if(enable_ota_push){
         if(wlan.state == WLAN_STA_CONNECTED || wlan.state == WLAN_AP_MODE){

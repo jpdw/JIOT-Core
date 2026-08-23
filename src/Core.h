@@ -17,6 +17,7 @@
 #include "Wlan.h"
 #include "Mqtt.h"
 #include "Gpio.h"
+#include "Scheduler.h"
 
 // Other config & info
 #include "buildConfig.h"  
@@ -40,6 +41,7 @@ public:
     WlanState getWlanState();    // Current WLAN connection state
     Mqtt mqtt;              // Mqtt object
     Gpio gpio;               // Named digital output/input helper
+    Scheduler scheduler;    // Non-blocking task scheduler (call scheduler.schedule(...) any time after construction)
 private:
     Wlan wlan;              // Wlan object
 
