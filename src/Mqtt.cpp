@@ -12,7 +12,7 @@
 #include "buildConfig.h"
 
 #include "Mlog.h"
-#include "Gpio.h"
+#include "Commands.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -199,9 +199,10 @@ void Mqtt::publishHello(){
  *  of a message for a subscribed topic (device/<deviceid>/cmnd or
  *  device/all/cmnd - see Mqtt::subscribe()).
  *
- *  Currently understands one command format: "gpio <name> on|off",
- *  routed through whatever Gpio instance was registered via setGpio()
- *  (Core wires this to its own gpio member).
+ *  Dispatches the payload as "<key> <rest>" against whatever CommandList
+ *  was registered via setCommands() (Core wires this to its own commands
+ *  member, which includes Core's own built-in "gpio"/"list" commands
+ *  alongside anything the application registers - see Commands.h).
  */
 void Mqtt::handleCallback(char *topic, byte *payload, unsigned int length){
 
@@ -216,23 +217,8 @@ void Mqtt::handleCallback(char *topic, byte *payload, unsigned int length){
     memcpy(msg, payload, copyLen);
     msg[copyLen] = '\0';
 
-    if (this->_gpio != nullptr){
-        char cmd[8];
-        char pinName[8];
-        char state[8];
-        if (sscanf(msg, "%7s %7s %7s", cmd, pinName, state) == 3 && strcmp(cmd, "gpio") == 0){
-            boolean on = (strcmp(state, "on") == 0);
-            boolean off = (strcmp(state, "off") == 0);
-            if (on || off){
-                boolean ok = this->_gpio->setOutput(pinName, on);
-                SER.print("gpio command: ");
-                SER.print(pinName);
-                SER.print(" -> ");
-                SER.print(on ? "ON" : "OFF");
-                SER.println(ok ? " (applied)" : " (unknown pin)");
-                return;
-            }
-        }
+    if (this->_commands != nullptr && this->_commands->runCommand(String(msg))){
+        return;
     }
 
     SER.print("Unrecognised command: ");

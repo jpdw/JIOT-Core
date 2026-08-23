@@ -9,6 +9,8 @@
 
 #include "Core.h"
 #include "Mlog.h"
+#include <string.h>
+#include <stdio.h>
 //
 
 
@@ -56,10 +58,31 @@ void Core::start(){
     // Get Device ID (string) early -- as this is fundamental
     this->deviceId = this->wlan.getDeviceIdSz();
 
-    // Let MQTT-received "gpio <name> on/off" commands reach our own gpio
-    // member - safe to wire up now regardless of WLAN/MQTT state, since
+    // Built-in commands, registered through the same mechanism an
+    // application uses for its own (see Commands.h) - "gpio" replaces
+    // what used to be hardcoded parsing inside Mqtt::handleCallback()
+    // itself. Safe to wire up now regardless of WLAN/MQTT state, since
     // handleCallback() only ever fires once MQTT actually connects.
-    mqtt.setGpio(&this->gpio);
+    this->commands.add("gpio", [this](String payload){
+        char pinName[8];
+        char state[8];
+        if (sscanf(payload.c_str(), "%7s %7s", pinName, state) == 2){
+            boolean on = (strcmp(state, "on") == 0);
+            boolean off = (strcmp(state, "off") == 0);
+            if (on || off){
+                boolean ok = this->gpio.setOutput(pinName, on);
+                SER.print("gpio command: ");
+                SER.print(pinName);
+                SER.print(" -> ");
+                SER.print(on ? "ON" : "OFF");
+                SER.println(ok ? " (applied)" : " (unknown pin)");
+            }
+        }
+    });
+    this->commands.add("list", [this](String payload){
+        this->commands.list();
+    });
+    mqtt.setCommands(&this->commands);
 
     // Output minimal startup & build info
     SER.println();

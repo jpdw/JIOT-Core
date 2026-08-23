@@ -26,6 +26,14 @@ void setup()
     core = new Core();
     core->start();
 
+    // Exercise Core's new Commands registry - MQTT "ping" (to device/<id>/cmnd
+    // or device/all/cmnd) should trigger this. Demonstrates the extension
+    // point an application (e.g. EFXC) uses to register its own commands,
+    // alongside Core's own built-in "gpio"/"list".
+    core->commands.add("ping", [](String payload){
+        SER.println("pong");
+    });
+
     // Exercise Core's new Gpio helper - register D5/D6/D7 as named outputs
     // so loop() can toggle them as a simple hardware sanity check.
     // Guarded on the real board macro, not on D5/D6/D7 themselves: on this

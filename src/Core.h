@@ -17,6 +17,7 @@
 #include "Mqtt.h"
 #include "Gpio.h"
 #include "Scheduler.h"
+#include "Commands.h"
 
 // Other config & info
 #include "buildConfig.h"
@@ -40,6 +41,7 @@ public:
     Mqtt mqtt;              // Mqtt object
     Gpio gpio;               // Named digital output/input helper
     Scheduler scheduler;    // Non-blocking task scheduler (call scheduler.schedule(...) any time after construction)
+    CommandList commands;   // Named MQTT command registry (call commands.add(...) any time after construction)
 private:
     Wlan wlan;              // Wlan object
 
