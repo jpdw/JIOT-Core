@@ -33,7 +33,6 @@ class Mlog{
         void startRemoteDebug();
         void handle();
     private:
-        char * mqttTopicLog;
         char * deviceId;
         char * generalBuffer;
         Mqtt * mqttClient = 0;

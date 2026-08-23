@@ -39,8 +39,15 @@
 // is flags for this are enabled.
 //
 
-// Define template for logging topic. Simple sprintf substitution
-const char *mqttTopicLogTemplate = "device/%s/log";
+// Bare subtopic - Mqtt::publish() already prepends "<TOPIC_CONTEXT>/<deviceId>/"
+// to whatever it's given (see Mqtt::publishHeartbeat() for the same pattern).
+// This used to be a fully-qualified "device/%s/log" string built per-instance
+// via malloc/sprintf, which meant it got double-prepended into
+// "home/<id>/device/<id>/log" once passed through publish() - "device/<id>/..."
+// is reserved for the special startup-only hello/cmnd topics (see
+// buildConfig.h's documented scheme), not logging. Fixed for every instance,
+// so no per-instance allocation is needed any more.
+const char *mqttLogSubtopic = "log";
 
 Mlog::Mlog(void){
     this->generalBuffer = new char[48];
@@ -63,10 +70,6 @@ void Mlog::startRemoteDebug(){
 void Mlog::begin(char * deviceIdPtr, Mqtt * mqttClientPtr){
     this->deviceId = deviceIdPtr;
     this->setMqttClient(mqttClientPtr);
-
-    // Build a cstring with the logging topic
-    this->mqttTopicLog = (char *)malloc(strlen(mqttTopicLogTemplate) + 7);
-    sprintf(mqttTopicLog, mqttTopicLogTemplate, deviceId);
 
     // Send an initial log
     sprintf(generalBuffer,"%s - Starting mLog", this->deviceId);
@@ -96,7 +99,7 @@ void Mlog::log(const char *msg)
     // stays opt-in behind INCLUDE_DEBUG: it's an unauthenticated network
     // listener, unlike local serial or a normal MQTT publish.
     if (this->mqttClient){
-        this->mqttClient->publish(mqttTopicLog, msgBuffer);
+        this->mqttClient->publish(mqttLogSubtopic, msgBuffer);
     }
 
     SER.println(msgBuffer);
