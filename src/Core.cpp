@@ -77,11 +77,6 @@ void Core::start(){
 
     //mlog.logf("a", "b");
 
-    // Set-up storage & load configuration
-    EEPROM.begin(512);
-
-
-
     // read hardware configuation
     // set-up hardware
 

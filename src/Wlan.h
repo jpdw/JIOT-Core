@@ -8,7 +8,8 @@
 
 #include <WiFiClient.h>
 #include <DNSServer.h>
-#include <EEPROM.h>
+#include <LittleFS.h>
+#include <ArduinoJson.h>
 #include "platform.h"
 
 typedef enum WlanState
@@ -24,6 +25,12 @@ typedef enum WlanState
 // and MQTT broker IP) - lets a device move between several known networks
 // (e.g. dev/test, home, off-grid) without re-entering everything each time.
 #define MAX_WLAN_PROFILES 4
+
+// Where saved WLAN profiles live on LittleFS - see Wlan::readConfig()/
+// saveProfiles(). Superseded raw EEPROM byte-packing (issue #7); legacy
+// EEPROM reading is kept only for one-time migration, see
+// Wlan::migrateLegacyEeprom().
+#define WLAN_PROFILES_FILE "/wlan.json"
 
 class WlanScanNetworks{
     private:
@@ -68,8 +75,9 @@ class Wlan{
         boolean wlanAssociationRequest(const char *,const char *);
         boolean wlanCheckAssociation();
 
-        boolean readConfig();
-        boolean readWlanProfile(unsigned int);
+        boolean readConfig();                            /* load profiles from LittleFS (/wlan.json), migrating from legacy EEPROM if no JSON file exists yet */
+        boolean migrateLegacyEeprom();                   /* one-time: read pre-LittleFS EEPROM-format profiles into wlanConfig[], if any */
+        void saveProfiles();                             /* write wlanConfig[] out to /wlan.json */
         int findProfileSlot(String ssid);               /* existing slot for ssid, first empty slot, or -1 if full */
 
         void setupMode();  

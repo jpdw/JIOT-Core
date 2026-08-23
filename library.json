@@ -22,6 +22,7 @@
     "dependencies":
     {
       "knolleary/PubSubClient": "^2.8",
-      "lennarthennigs/ESP Telnet": "^2.3.0"
+      "lennarthennigs/ESP Telnet": "^2.3.0",
+      "bblanchon/ArduinoJson": "^7"
     }
   }

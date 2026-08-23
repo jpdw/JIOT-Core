@@ -8,6 +8,7 @@
 #include "Wlan.h"
 #include "buildConfig.h"
 #include "coreDebug.h"
+#include <EEPROM.h> // only for Wlan::migrateLegacyEeprom() - see Wlan.h
 
 boolean settingMode;
 WiFiClient wifiClient;
@@ -17,17 +18,10 @@ WebServerClass webServer(80);
 
 // Constants
 #define WLAN_ASSOCIATION_TIMEOUT 15 /* seconds */
-// Bytes per stored profile: 32 SSID + 64 password + 4 MQTT IP = 100.
-// (Was previously packed at a 96-byte stride - too small for the 100 bytes
-// actually written, so profile N+1 silently overlapped/corrupted profile
-// N's saved MQTT IP. Never hit in practice because only slot 0 was ever
-// written before profiles became selectable.)
+// Bytes per legacy EEPROM-format profile: 32 SSID + 64 password + 4 MQTT
+// IP = 100. Only relevant to Wlan::migrateLegacyEeprom() now - profiles
+// are stored as JSON on LittleFS (WLAN_PROFILES_FILE) for everything else.
 #define WLAN_PROFILE_EEPROM_SIZE 100
-
-// Define helper functions that are at the end of this file
-void writeEeprom(unsigned int, String, String, const unsigned int*);
-void showEeprom(int, int);
-
 
 const IPAddress apIP(192, 168, 1, 1);
 
@@ -115,25 +109,49 @@ String Wlan::getMqttIp()
     return "";
 }
 
-boolean Wlan::readWlanProfile(unsigned int index)
+/*
+ *  migrateLegacyEeprom
+ *
+ *  One-time migration from the pre-LittleFS storage format (issue #7):
+ *  reads whatever profiles are present in raw EEPROM, using the exact
+ *  byte layout that used to be Wlan's primary storage, into wlanConfig[].
+ *  Only called from readConfig() when WLAN_PROFILES_FILE doesn't exist
+ *  yet - once migrated, this code path is never exercised again on that
+ *  device (EEPROM itself is left untouched; simply not read again).
+ *
+ *  Returns true if at least one profile was found and migrated.
+ */
+boolean Wlan::migrateLegacyEeprom()
 {
-    // index is 0-based, matching wlanConfig[] and readConfig()'s loop
-    unsigned int offset = 4 + (index * WLAN_PROFILE_EEPROM_SIZE);
+    EEPROM.begin(512);
 
-    SER.print("Reading config profile #");
-    SER.println(index + 1); // printed 1-based for humans
+    boolean found = false;
 
-    this->wlanConfig[index].ssid = "";
-    this->wlanConfig[index].pass = "";
-
-    if (EEPROM.read(offset) != 0 && EEPROM.read(offset) != 255)
+    SER.print("Checking for legacy EEPROM profile data... ");
+    if (!(EEPROM.read(0) == 0xAA && EEPROM.read(1) == 0x55 && EEPROM.read(2) == 0xAA))
     {
+        SER.println("none found");
+        return false;
+    }
+    SER.println("found - migrating to " WLAN_PROFILES_FILE);
+
+    for (unsigned int index = 0; index < MAX_WLAN_PROFILES; ++index)
+    {
+        unsigned int offset = 4 + (index * WLAN_PROFILE_EEPROM_SIZE);
+
+        wlanConfig[index].ssid = "";
+        wlanConfig[index].pass = "";
+        wlanConfig[index].ipaddr = "";
+
+        if (EEPROM.read(offset) == 0 || EEPROM.read(offset) == 255)
+        {
+            continue; // empty slot
+        }
+
         for (int i = 0; i < 32; ++i)
         {
             wlanConfig[index].ssid += char(EEPROM.read(offset + i));
         }
-        SER.print("SSID: ");
-        SER.println(wlanConfig[index].ssid);
         for (int i = 32; i < 96; ++i)
         {
             wlanConfig[index].pass += char(EEPROM.read(offset + i));
@@ -146,12 +164,49 @@ boolean Wlan::readWlanProfile(unsigned int index)
         }
         wlanConfig[index].ipaddr = String(a[0]) + "." + String(a[1]) + "." + String(a[2]) + "." + String(a[3]);
 
-        return true;
+        SER.print("Migrated profile #");
+        SER.print(index + 1); // printed 1-based for humans
+        SER.print(": SSID ");
+        SER.println(wlanConfig[index].ssid);
+        found = true;
     }
-    else
+
+    return found;
+}
+
+/*
+ *  saveProfiles
+ *
+ *  Writes every non-empty entry of wlanConfig[] to WLAN_PROFILES_FILE as
+ *  JSON, overwriting the whole file - the in-RAM array is always the
+ *  source of truth, this just flushes it.
+ */
+void Wlan::saveProfiles()
+{
+    JsonDocument doc;
+    JsonArray profiles = doc["profiles"].to<JsonArray>();
+
+    for (unsigned int i = 0; i < MAX_WLAN_PROFILES; ++i)
     {
-        return false;
+        if (wlanConfig[i].ssid.length() == 0)
+        {
+            continue;
+        }
+        JsonObject profile = profiles.add<JsonObject>();
+        profile["ssid"] = wlanConfig[i].ssid;
+        profile["pass"] = wlanConfig[i].pass;
+        profile["mqttIp"] = wlanConfig[i].ipaddr;
     }
+
+    File f = LittleFS.open(WLAN_PROFILES_FILE, "w");
+    if (!f)
+    {
+        SER.println("Failed to open " WLAN_PROFILES_FILE " for writing");
+        return;
+    }
+    serializeJson(doc, f);
+    f.close();
+    SER.println("Saved profiles to " WLAN_PROFILES_FILE);
 }
 
 /*
@@ -183,42 +238,96 @@ int Wlan::findProfileSlot(String ssid)
 /*
   readConfig
 
-  Read network config from EEPROM and returns
-  - true if config read
-  - false if no config read
+  Load network config from LittleFS (WLAN_PROFILES_FILE). If that yields
+  zero usable profiles - whether because the file doesn't exist, fails to
+  parse, or exists but is unrelated content (e.g. leftover from other
+  firmware previously run on the same hardware/flash - a real case hit
+  during development, not just theoretical) - falls back to a one-time
+  legacy-EEPROM migration attempt. A successful migration overwrites
+  whatever was there with our own schema, so this is self-healing on the
+  next boot either way. Returns
+  - true if any profile was loaded (from JSON or freshly migrated)
+  - false if no config is available (falls through to AP setup mode)
 */
-unsigned int eepromMapVersion = 0;
 boolean Wlan::readConfig()
 {
-    SER.println("Reading EEPROM...");
-
-    SER.print("Checking for EEPROM map... ");
-    if (EEPROM.read(0) == 0xAA && EEPROM.read(1) == 0x55 && EEPROM.read(2) == 0xAA)
+    // format-and-retry rather than relying on each core's differing
+    // begin() default (ESP8266 auto-formats on failure, ESP32 doesn't) -
+    // see the storage-backend plan in issue #7 for why.
+    if (!LittleFS.begin())
     {
-        eepromMapVersion = EEPROM.read(3);
-        SER.print("map version ");
-        SER.println(eepromMapVersion);
-    }
-    else
-    {
-        SER.print("no map or unknown version");
-        return false;
-    }
-
-    if (eepromMapVersion > 0)
-    {
-
-        for (int i = 0; i < MAX_WLAN_PROFILES; ++i)
+        SER.println("LittleFS mount failed - formatting...");
+        LittleFS.format();
+        if (!LittleFS.begin())
         {
-            readWlanProfile(i);
+            SER.println("LittleFS still unavailable after format");
+            return false;
+        }
+    }
+
+    for (unsigned int i = 0; i < MAX_WLAN_PROFILES; ++i)
+    {
+        wlanConfig[i].ssid = "";
+        wlanConfig[i].pass = "";
+        wlanConfig[i].ipaddr = "";
+    }
+
+    unsigned int loaded = 0;
+
+    if (LittleFS.exists(WLAN_PROFILES_FILE))
+    {
+        File f = LittleFS.open(WLAN_PROFILES_FILE, "r");
+        if (!f)
+        {
+            SER.println("Failed to open " WLAN_PROFILES_FILE " for reading");
+        }
+        else
+        {
+            SER.print(WLAN_PROFILES_FILE " exists, size ");
+            SER.print(f.size());
+            SER.println(" bytes");
+
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, f);
+            f.close();
+            if (err)
+            {
+                SER.print("Failed to parse " WLAN_PROFILES_FILE ": ");
+                SER.println(err.c_str());
+            }
+            else
+            {
+                JsonArray profiles = doc["profiles"].as<JsonArray>();
+                for (JsonObject profile : profiles)
+                {
+                    if (loaded >= MAX_WLAN_PROFILES)
+                    {
+                        break; // defensive - saveProfiles() never writes more than this
+                    }
+                    wlanConfig[loaded].ssid = profile["ssid"].as<String>();
+                    wlanConfig[loaded].pass = profile["pass"].as<String>();
+                    wlanConfig[loaded].ipaddr = profile["mqttIp"].as<String>();
+                    SER.print("Loaded profile #");
+                    SER.print(loaded + 1); // printed 1-based for humans
+                    SER.print(": SSID ");
+                    SER.println(wlanConfig[loaded].ssid);
+                    ++loaded;
+                }
+            }
         }
     }
     else
     {
-        return false;
+        SER.println("No " WLAN_PROFILES_FILE " yet");
     }
 
-    return true;
+    if (loaded == 0 && migrateLegacyEeprom())
+    {
+        saveProfiles();
+        return true;
+    }
+
+    return loaded > 0;
 }
 
 /*
@@ -376,19 +485,6 @@ void Wlan::startWebServer()
             String ipaddr_s = urlDecode(webServer.arg("ipaddr"));
             SER.print("MQTT IP Address: ");
             SER.println(ipaddr_s);
-            char ipaddr[16];
-            unsigned int ip[4];
-            ipaddr_s.toCharArray(ipaddr, 16);
-            sscanf(ipaddr, "%u.%u.%u.%u", &ip[0], &ip[1], &ip[2], &ip[3]);
-
-            SER.print(ip[0]);
-            SER.print(".");
-            SER.print(ip[1]);
-            SER.print(".");
-            SER.print(ip[2]);
-            SER.print(".");
-            SER.println(ip[3]);
-            SER.print("done");
 
             // Update the existing slot for this SSID if it's already
             // saved, otherwise the first free slot - not always slot 0,
@@ -403,7 +499,10 @@ void Wlan::startWebServer()
                 return;
             }
 
-            writeEeprom(slot, ssid, pass, ip);
+            wlanConfig[slot].ssid = ssid;
+            wlanConfig[slot].pass = pass;
+            wlanConfig[slot].ipaddr = ipaddr_s;
+            saveProfiles();
 
             String s = "<h1>Setup complete.</h1><p>device will be connected to \"";
             s += ssid;
@@ -427,15 +526,7 @@ void Wlan::startWebServer()
             webServer.send(200, "text/html", makePage("STA mode", s));
         });
         webServer.on("/reset", [&]() {
-            // Wipe the signature bytes plus every profile slot - previously
-            // only wiped the first 96 bytes, which barely reached past
-            // slot 0 and never touched any other saved network.
-            unsigned int totalBytes = 4 + (MAX_WLAN_PROFILES * WLAN_PROFILE_EEPROM_SIZE);
-            for (unsigned int i = 0; i < totalBytes; ++i)
-            {
-                EEPROM.write(i, 0);
-            }
-            EEPROM.commit();
+            LittleFS.remove(WLAN_PROFILES_FILE);
             String s = "<h1>Wi-Fi settings have been reset.</h1><p>Please reboot device.</p>";
             webServer.send(200, "text/html", makePage("Reset Wi-Fi Settings", s));
         });
@@ -577,77 +668,6 @@ String WlanScanNetworks::getOptionList()
     return optionList;
 }
 
-
-/*
- *  Non-class functions
- *  ===================
- */
-
-void showEeprom(int addr_from, int length)
-{
-    SER.print("Reading EEPROM from ");
-    SER.println(addr_from);
-    SER.print(" for ");
-    SER.println(length);
-    SER.println(" bytes:");
-    for (int i = 0; i < 12; ++i)
-    {
-        SER.print(addr_from + i);
-        SER.print(": ");
-        SER.print(EEPROM.read(addr_from + i));
-        SER.print(" ");
-       SER.println(char(EEPROM.read(addr_from + i)));
-    }
-}
-void writeEeprom(unsigned int index, String ssid, String pass, const unsigned int mqttIp[4])
-{
-    unsigned int offset = 4 + (index * WLAN_PROFILE_EEPROM_SIZE);
-    unsigned int i;
-
-    // Write signature
-    EEPROM.write(0, 0xAA);
-    EEPROM.write(1, 0x55);
-    EEPROM.write(2, 0xAA);
-    EEPROM.write(3, 0x01);
-
-    // Clear EEPROM for this record/index
-    for (unsigned int i = 0; i < WLAN_PROFILE_EEPROM_SIZE; ++i)
-    {
-        EEPROM.write(offset + i, 0);
-    }
-
-    EEPROM.commit();
-
-    SER.println("Writing ESSID to EEPROM...");
-
-    for (i = 0; i < ssid.length(); i++)
-    {
-        EEPROM.write(offset + i, ssid[i]);
-        //Serial.print("Addr ");
-        //Serial.print(offset+i);
-        //Serial.print(": ");
-        //Serial.println(ssid[i]);
-    }
-    //Serial.print(offset+i);
-    EEPROM.write(offset + i, 0);
-
-    SER.println("Writing Password to EEPROM...");
-    for (i = 0; i < pass.length(); ++i)
-    {
-        EEPROM.write(offset + 32 + i, pass[i]);
-    }
-    EEPROM.write(offset + 32 + i, 0);
-
-    SER.println("Writing MQTT IP to EEPROM...");
-    for (i = 0; i < 4; ++i)
-    {
-        EEPROM.write(offset + 96 + i, mqttIp[i]);
-    }
-    EEPROM.write(offset + 96 + i, 0);
-
-    EEPROM.commit();
-    SER.println("Write EEPROM done!");
-}
 
 
 

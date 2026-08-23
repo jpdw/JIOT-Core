@@ -10,7 +10,6 @@
 #pragma once
 // Framework includes
 #include <Arduino.h>
-#include <EEPROM.h>
 #include "platform.h"
 
 // Library includes
