@@ -10,7 +10,6 @@
 #include "Mqtt.h"
 #include "build_info.h"
 #include "buildConfig.h"
-#include "coreDebug.h"
 
 #include "Mlog.h"
 #include "Gpio.h"
@@ -42,12 +41,8 @@ const unsigned int mqtt_server_port = 1883;
 
 
 
-WiFiClient espClient;
-PubSubClient mqttClient(espClient);
-
-Mqtt::Mqtt(void){
+Mqtt::Mqtt(void) : client(_wifiClient){
     this->intervlHb = HB_INTERVAL_S * 1000;
-    this->client=mqttClient;
 }
 
 void Mqtt::begin(char * nodeName, char * deviceId, const char * serverIp){
@@ -160,7 +155,7 @@ void Mqtt::publishHeartbeat(){
     SER.print("heartbeat = ");
     mlog.log(msg);
   
-    this->publish("heaartbeat",msg);
+    this->publish("heartbeat",msg);
 }
 
 void Mqtt::publishHello(){

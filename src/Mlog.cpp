@@ -8,7 +8,6 @@
 #define mlErrors 1
 
 #include "buildConfig.h"
-#include "coreDebug.h"
 
 #include <Arduino.h>
 #include "Mlog.h"
@@ -123,6 +122,11 @@ void Mlog::log(Level msgLevel, String msg)
     if(msgLevel <= this->level){
         this->log(msg.c_str());
     }
+}
+
+void Mlog::setLevel(Level newLevel)
+{
+    this->level = newLevel;
 }
 /*
 void Mlog::log(char *str, ...)

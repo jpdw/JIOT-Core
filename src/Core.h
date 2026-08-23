@@ -19,9 +19,8 @@
 #include "Scheduler.h"
 
 // Other config & info
-#include "buildConfig.h"  
+#include "buildConfig.h"
 #include "build_info.h"
-#include "coreDebug.h"
 
 // Constants
 #define SERIAL_BIT_RATE 115200

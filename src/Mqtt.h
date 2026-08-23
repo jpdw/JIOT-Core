@@ -4,6 +4,7 @@ mqtt class header file
 */
 
 #pragma once
+#include <WiFiClient.h>
 #include "PubSubClient.h"
 #include "platform.h"
 
@@ -11,6 +12,10 @@ class Gpio; // forward declaration - see Gpio.h; only a pointer is needed here
 
 class Mqtt {
     private:
+        // Owned directly and bound to `client` in the constructor's
+        // initializer list - previously a file-scope global PubSubClient
+        // was copied into `client` via assignment for no clear reason.
+        WiFiClient _wifiClient;
         PubSubClient client;
 
         char* nodeName;          // Pointer to node name used for identifying self in MQTT connection
@@ -38,7 +43,6 @@ class Mqtt {
 
         void publishHello();    // publish to a subject
         void publishHeartbeat();    // regular heartbeat
-        void unsubscribe();      // this must be possible! 
 
         void handleCallback(char *, byte *, unsigned int);   // route callback by subject
         void handle();           // generic handle function for parent run-loop

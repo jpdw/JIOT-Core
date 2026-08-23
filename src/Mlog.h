@@ -17,10 +17,18 @@ class Mlog{
         Mlog(void);
         void begin(char *);
         void begin(char *, Mqtt *);
+        // log(const char*)/log(String) (used by almost every call site in
+        // this codebase) are always emitted, regardless of setLevel() -
+        // Mlog's core purpose is a "syslog"-style log (see Mlog.cpp's file
+        // header), not a debug-only feature, so unleveled calls stay
+        // unconditionally visible rather than silently defaulting to a
+        // level that could suppress them. Only the explicit log(Level,
+        // String) overload is filtered against the threshold set here.
         void log(const char*);
         void log(String);
         void log(Level, String);
         /*void logf(char *str, ...);*/
+        void setLevel(Level);    // change the log(Level, String) filter threshold (default: warning)
         void setMqttClient(Mqtt *);
         void startRemoteDebug();
         void handle();

@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 #include "buildConfig.h"
-#include "coreDebug.h"
 #include "Core.h"
 #ifdef INCLUDE_DEBUG
   #include <ESPTelnet.h>

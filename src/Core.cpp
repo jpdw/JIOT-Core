@@ -9,7 +9,6 @@
 
 #include "Core.h"
 #include "Mlog.h"
-#include "coreDebug.h"
 //
 
 
@@ -53,7 +52,6 @@ void Core::start(){
 
     // Set-up serial so we get debug early
     SER.begin(SERIAL_BIT_RATE);
-    SER.begin(115200);
 
     // Get Device ID (string) early -- as this is fundamental
     this->deviceId = this->wlan.getDeviceIdSz();
@@ -85,8 +83,6 @@ void Core::start(){
     wlan.begin();
 
     if(wlan.state == WLAN_STA_CONNECTED){
-        SER.println("wlan.state == WLAN_STA_CONNECTED");
-
         // MQTT-based logging is Mlog's core purpose, not a debug-only
         // feature - wire it up unconditionally. Telnet remote debug stays
         // opt-in behind INCLUDE_DEBUG (an unauthenticated network listener).
@@ -98,29 +94,12 @@ void Core::start(){
         // Start up other things that were dependant on being connected
 
     }
-    
-    switch((int)wlan.state){
-        case 0:{
-            SER.println("WLAN_STA_OFF");
-            break;
-        }
-        case 1:{
-            SER.println("WLAN_STA_STARTUP");
-            break;
-        }
-        case 2:{
-            SER.println("WLAN_STA_AP");
-            break;
-        }
-        case 3:{
-            SER.println("WLAN_STA_CONNECTING");
-            break;
-        }
-        case 4:{
-            SER.println("WLAN_STA_CONNECTED");
-            break;
-        }
-    }
+
+    // Reuses the same name mapping Core::handle()'s periodic status report
+    // uses, rather than a second hand-duplicated switch (which had drifted
+    // out of sync with the real WlanState names - e.g. printed
+    // "WLAN_STA_OFF" for WLAN_OFF).
+    SER.println(wlanStateName(wlan.state));
 
     if(wlan.state == WLAN_STA_CONNECTED){
         // Start OTA-Ardiono uplod
@@ -168,10 +147,10 @@ void Core::handle(){
 #ifdef INCLUDE_OTA_PUSH
 void start_ota(){
     ArduinoOTA.onStart([]() {
-        //mlog("OTA Push request started");
+        mlog.log("OTA Push request started");
     });
     ArduinoOTA.onEnd([]() {
-        //mlog("OTA Push request finished");
+        mlog.log("OTA Push request finished");
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
         SER.printf("Progress: %u%%\r", (progress / (total / 100)));

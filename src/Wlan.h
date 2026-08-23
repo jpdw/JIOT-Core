@@ -80,18 +80,14 @@ class Wlan{
         void saveProfiles();                             /* write wlanConfig[] out to /wlan.json */
         int findProfileSlot(String ssid);               /* existing slot for ssid, first empty slot, or -1 if full */
 
-        void setupMode();  
+        void setupMode();
         String makePage(String, String);
         String urlDecode(String);
-        String deviceID();
         void startWebServer();
-        boolean restoreConfig();
-        boolean readWlanConfig(unsigned int);
 };
 
 
 
-extern char * device_id;
 extern WiFiClient wifiClient;
 extern boolean settingMode;
 

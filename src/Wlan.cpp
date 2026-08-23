@@ -7,7 +7,6 @@
 
 #include "Wlan.h"
 #include "buildConfig.h"
-#include "coreDebug.h"
 #include <EEPROM.h> // only for Wlan::migrateLegacyEeprom() - see Wlan.h
 
 boolean settingMode;
@@ -481,7 +480,8 @@ void Wlan::startWebServer()
             SER.println(ssid);
             String pass = urlDecode(webServer.arg("pass"));
             SER.print("Password: ");
-            SER.println(pass);
+            SER.print(pass.length());
+            SER.println(" chars (not logged)");
             String ipaddr_s = urlDecode(webServer.arg("ipaddr"));
             SER.print("MQTT IP Address: ");
             SER.println(ipaddr_s);
