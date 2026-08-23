@@ -70,8 +70,7 @@ void Mqtt::begin(char * nodeName, char * deviceId, const char * serverIp){
     using std::placeholders::_2;
     using std::placeholders::_3;
     this->client.setCallback(std::bind( &Mqtt::handleCallback, this, _1,_2,_3));
-    mlog.log("Mqtt::begin");
-    
+
     //  Generate pre-pend to be used on (almost all) publishes
     this->topicPrepend = new char[strlen(TOPIC_CONTEXT) + strlen(this->deviceId) +3];
     sprintf(this->topicPrepend, "%s/%s/",TOPIC_CONTEXT, this->deviceId);
@@ -79,6 +78,10 @@ void Mqtt::begin(char * nodeName, char * deviceId, const char * serverIp){
     // topicPrepend (and nodeName/deviceId above) are now safe to use -
     // nothing in handle()/publish() should touch them before this point
     this->_initialized = true;
+
+    mlog.log("Mqtt::begin"); // moved here (after _initialized) so this
+                              // actually gets published, not silently
+                              // dropped by publish()'s own guard
 
     // One non-blocking attempt now; if it fails (broker unreachable at
     // boot), Mqtt::handle() retries on a timer rather than blocking here.
@@ -138,6 +141,12 @@ void Mqtt::subscribe(){
  *   prepend topic with '<context>/<device>/'
  */
 void Mqtt::publish(const char * topic, const char * payload){
+    // topicPrepend isn't set until begin() finishes - refuse rather than
+    // dereference it if something (e.g. Mlog, once its MQTT path is
+    // unconditional) calls publish() before that point.
+    if (!this->_initialized){
+        return;
+    }
     char pubTopic[strlen(topic) + strlen(this->topicPrepend) + 1];
     snprintf(pubTopic, sizeof(pubTopic), "%s%s", this->topicPrepend, topic);
 FREEHEAP_BASELINE   

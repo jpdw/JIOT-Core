@@ -91,14 +91,18 @@ void Mlog::log(const char *msg)
     msgBuffer = (char *)malloc(strlen(msg) + 14);
     sprintf(msgBuffer, msgTemplate, millis(), msg);
 
+    // MQTT publish and local serial output are this class's core purpose
+    // (a "syslog"-style log, per the file header comment) - not a debug-
+    // only feature, so both happen unconditionally. Telnet remote debug
+    // stays opt-in behind INCLUDE_DEBUG: it's an unauthenticated network
+    // listener, unlike local serial or a normal MQTT publish.
+    if (this->mqttClient){
+        this->mqttClient->publish(mqttTopicLog, msgBuffer);
+    }
+
+    SER.println(msgBuffer);
+
     #ifdef INCLUDE_DEBUG
-        if (this->mqttClient){
-            this->mqttClient->publish(mqttTopicLog, msgBuffer);
-        }
-
-        SER.print("[NO RMDBG] ");
-        SER.println(msgBuffer);
-
         Telnet.println(msgBuffer);
     #endif
     if (msgBuffer)

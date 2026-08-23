@@ -80,9 +80,11 @@ void Core::start(){
     if(wlan.state == WLAN_STA_CONNECTED){
         SER.println("wlan.state == WLAN_STA_CONNECTED");
 
-        #ifdef INCLUDE_DEBUG
-        // Update logger with mqtt client details
+        // MQTT-based logging is Mlog's core purpose, not a debug-only
+        // feature - wire it up unconditionally. Telnet remote debug stays
+        // opt-in behind INCLUDE_DEBUG (an unauthenticated network listener).
         mlog.setMqttClient(&this->mqtt);
+        #ifdef INCLUDE_DEBUG
         mlog.startRemoteDebug();
         #endif
 
