@@ -37,6 +37,18 @@ const char* wlanStateName(WlanState state){
     }
 }
 
+void Core::setNodeName(const char * nodeName){
+    this->nodeName = nodeName;
+}
+
+const char * Core::getDeviceId(){
+    return this->deviceId;
+}
+
+WlanState Core::getWlanState(){
+    return this->wlan.state;
+}
+
 void Core::start(){
 
     // Set-up serial so we get debug early
@@ -125,7 +137,7 @@ void Core::start(){
 #endif
         delay(1000);
         String savedMqttIp = wlan.getMqttIp();
-        mqtt.begin((char*)"new node", this->deviceId, savedMqttIp.c_str());
+        mqtt.begin((char*)this->nodeName, this->deviceId, savedMqttIp.c_str());
     }
     mlog.log("Setup complete");
 }
